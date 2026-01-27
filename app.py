@@ -202,30 +202,55 @@ with tab2:
     if not pairs:
         st.info("Add currency pairs and set alerts first.")
     else:
-        if st.button("🔔 Check All Alerts", type="primary"):
+        # Auto-monitor toggle
+        col_monitor1, col_monitor2 = st.columns([1, 2])
+        with col_monitor1:
+            auto_monitor = st.toggle("Auto-Monitor", value=False, help="Automatically check alerts every 30 seconds")
+        with col_monitor2:
+            if auto_monitor:
+                st.caption("🟢 Monitoring active - checking every 30 seconds")
+
+        # Browser notification permission request
+        if auto_monitor:
+            notification_js = """
+            <script>
+            if ("Notification" in window && Notification.permission === "default") {
+                Notification.requestPermission();
+            }
+            </script>
+            """
+            components.html(notification_js, height=0)
+
+        # Check alerts function
+        def check_all_alerts():
             triggered = []
             checked = 0
 
+            for pair in pairs:
+                if not pair['alerts']:
+                    continue
+
+                rate = get_rate(pair['base'], pair['quote'])
+                if rate is None:
+                    continue
+
+                checked += len(pair['alerts'])
+
+                for alert in pair['alerts']:
+                    if check_alert_triggered(alert, rate):
+                        triggered.append({
+                            'pair': f"{pair['base']}/{pair['quote']}",
+                            'type': alert['type'],
+                            'target': alert['target'],
+                            'rate': rate,
+                            'note': alert.get('note', '')
+                        })
+            return triggered, checked
+
+        # Manual check button
+        if st.button("🔔 Check All Alerts Now", type="primary"):
             with st.spinner("Checking alerts..."):
-                for pair in pairs:
-                    if not pair['alerts']:
-                        continue
-
-                    rate = get_rate(pair['base'], pair['quote'])
-                    if rate is None:
-                        continue
-
-                    checked += len(pair['alerts'])
-
-                    for alert in pair['alerts']:
-                        if check_alert_triggered(alert, rate):
-                            triggered.append({
-                                'pair': f"{pair['base']}/{pair['quote']}",
-                                'type': alert['type'],
-                                'target': alert['target'],
-                                'rate': rate,
-                                'note': alert.get('note', '')
-                            })
+                triggered, checked = check_all_alerts()
 
             if triggered:
                 st.success(f"🚨 {len(triggered)} alert(s) triggered!")
@@ -234,8 +259,56 @@ with tab2:
                     st.warning(f"**{t['pair']}** has {direction} {t['target']:.5f} (Current: {t['rate']:.5f})")
                     if t['note']:
                         st.caption(f"Note: {t['note']}")
+
+                    # Send browser notification
+                    notif_js = f"""
+                    <script>
+                    if ("Notification" in window && Notification.permission === "granted") {{
+                        new Notification("Forex Alert: {t['pair']}", {{
+                            body: "Price {direction} {t['target']:.5f}\\nCurrent: {t['rate']:.5f}",
+                            icon: "💱",
+                            requireInteraction: true
+                        }});
+                    }}
+                    </script>
+                    """
+                    components.html(notif_js, height=0)
             else:
                 st.info(f"No alerts triggered. Checked {checked} alert(s).")
+
+        # Auto-refresh if monitoring is enabled
+        if auto_monitor:
+            import time
+            from streamlit_autorefresh import st_autorefresh
+
+            # Refresh every 30 seconds
+            count = st_autorefresh(interval=30000, limit=None, key="alert_monitor")
+
+            if count > 0:
+                triggered, checked = check_all_alerts()
+
+                if triggered:
+                    st.error(f"🚨 {len(triggered)} ALERT(S) TRIGGERED!")
+                    for t in triggered:
+                        direction = "risen above" if t['type'] == 'above' else "fallen below"
+                        st.warning(f"**{t['pair']}** has {direction} {t['target']:.5f} (Current: {t['rate']:.5f})")
+
+                        # Browser notification
+                        notif_js = f"""
+                        <script>
+                        if ("Notification" in window && Notification.permission === "granted") {{
+                            new Notification("Forex Alert: {t['pair']}", {{
+                                body: "Price {direction} {t['target']:.5f}\\nCurrent: {t['rate']:.5f}",
+                                requireInteraction: true
+                            }});
+                        }}
+                        </script>
+                        """
+                        components.html(notif_js, height=0)
+                else:
+                    st.success(f"✓ Last check: {checked} alerts OK")
+
+        st.divider()
 
         # Show alert summary
         st.subheader("Alert Summary")
@@ -248,6 +321,17 @@ with tab2:
                 for alert in pair['alerts']:
                     icon = "📈" if alert['type'] == 'above' else "📉"
                     st.caption(f"  {icon} {alert['type']} {alert['target']:.5f}")
+
+        # Desktop monitor instructions
+        st.divider()
+        st.subheader("Desktop Notifications")
+        st.markdown("""
+        For desktop notifications that work even when the browser is closed, run the monitor script:
+        ```bash
+        python monitor.py --interval 60
+        ```
+        This will check alerts every 60 seconds and send system notifications.
+        """)
 
 with tab3:
     st.header("Live Exchange Rates")

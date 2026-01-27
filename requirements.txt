@@ -2,4 +2,5 @@ click
 requests
 plyer
 streamlit
+streamlit-autorefresh
 tradingview-ta
