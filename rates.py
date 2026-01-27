@@ -1,10 +1,21 @@
 """
 Rates module for Forex Watchlist application.
 Fetches real-time forex rates from TradingView (OANDA data).
+Falls back to Frankfurter API if TradingView is rate limited.
 No API key required.
 """
 
+import time
+import requests
 from tradingview_ta import TA_Handler, Interval
+
+# Cache for rate limiting (stores last fetch time and result)
+_rate_cache = {}
+CACHE_DURATION = 30  # seconds
+
+# Track if TradingView is rate limited
+_tradingview_blocked_until = 0
+BLOCK_DURATION = 300  # 5 minutes cooldown when rate limited
 
 # Common forex pairs available on OANDA via TradingView
 FOREX_PAIRS = {
@@ -54,20 +65,29 @@ def get_symbol(base, quote):
     return None
 
 
-def get_rate(base, quote):
-    """
-    Fetch real-time exchange rate from TradingView (OANDA).
+def _get_rate_frankfurter(base, quote):
+    """Fallback: fetch rate from Frankfurter API (ECB data)."""
+    try:
+        url = f"https://api.frankfurter.app/latest?from={base.upper()}&to={quote.upper()}"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        return data['rates'].get(quote.upper())
+    except Exception as e:
+        print(f"Frankfurter fallback error: {e}")
+        return None
 
-    Args:
-        base (str): Base currency code (e.g., 'EUR')
-        quote (str): Quote currency code (e.g., 'USD')
 
-    Returns:
-        float: Exchange rate, or None if failed
-    """
+def _get_rate_tradingview(base, quote):
+    """Fetch rate from TradingView."""
+    global _tradingview_blocked_until
+
+    # Check if we're in cooldown
+    if time.time() < _tradingview_blocked_until:
+        return None
+
     symbol = get_symbol(base, quote)
     if not symbol:
-        print(f"Pair {base}/{quote} not available")
         return None
 
     try:
@@ -80,43 +100,122 @@ def get_rate(base, quote):
         analysis = handler.get_analysis()
         return analysis.indicators.get("close")
     except Exception as e:
-        print(f"Error fetching rate for {base}/{quote}: {e}")
+        if "429" in str(e):
+            # Rate limited - set cooldown
+            _tradingview_blocked_until = time.time() + BLOCK_DURATION
+            print(f"TradingView rate limited. Using fallback for {BLOCK_DURATION}s")
         return None
+
+
+def get_rate(base, quote):
+    """
+    Fetch exchange rate - tries TradingView first, falls back to Frankfurter.
+    Results are cached for 30 seconds to avoid rate limiting.
+
+    Args:
+        base (str): Base currency code (e.g., 'EUR')
+        quote (str): Quote currency code (e.g., 'USD')
+
+    Returns:
+        float: Exchange rate, or None if failed
+    """
+    cache_key = f"{base}/{quote}"
+    now = time.time()
+
+    # Check cache first
+    if cache_key in _rate_cache:
+        cached_time, cached_rate = _rate_cache[cache_key]
+        if now - cached_time < CACHE_DURATION:
+            return cached_rate
+
+    # Try TradingView first
+    rate = _get_rate_tradingview(base, quote)
+
+    # Fallback to Frankfurter if TradingView failed
+    if rate is None:
+        rate = _get_rate_frankfurter(base, quote)
+
+    # Update cache if we got a rate
+    if rate is not None:
+        _rate_cache[cache_key] = (now, rate)
+        return rate
+
+    # Return stale cache if available
+    if cache_key in _rate_cache:
+        return _rate_cache[cache_key][1]
+
+    return None
 
 
 def get_rate_with_details(base, quote):
     """
     Fetch rate with additional details (open, high, low, change).
+    Falls back to basic rate if TradingView is unavailable.
 
     Returns:
         dict: Rate details or None if failed
     """
+    global _tradingview_blocked_until
+
+    cache_key = f"{base}/{quote}_details"
+    now = time.time()
+
+    # Check cache
+    if cache_key in _rate_cache:
+        cached_time, cached_data = _rate_cache[cache_key]
+        if now - cached_time < CACHE_DURATION:
+            return cached_data
+
     symbol = get_symbol(base, quote)
-    if not symbol:
-        return None
 
-    try:
-        handler = TA_Handler(
-            symbol=symbol,
-            screener="forex",
-            exchange="OANDA",
-            interval=Interval.INTERVAL_1_MINUTE
-        )
-        analysis = handler.get_analysis()
-        indicators = analysis.indicators
+    # Try TradingView if not rate limited
+    if symbol and time.time() >= _tradingview_blocked_until:
+        try:
+            handler = TA_Handler(
+                symbol=symbol,
+                screener="forex",
+                exchange="OANDA",
+                interval=Interval.INTERVAL_1_MINUTE
+            )
+            analysis = handler.get_analysis()
+            indicators = analysis.indicators
 
-        return {
-            "close": indicators.get("close"),
-            "open": indicators.get("open"),
-            "high": indicators.get("high"),
-            "low": indicators.get("low"),
-            "change": indicators.get("change"),
-            "change_pct": indicators.get("change") / indicators.get("open") * 100 if indicators.get("open") else 0,
-            "recommendation": analysis.summary.get("RECOMMENDATION", "NEUTRAL")
+            result = {
+                "close": indicators.get("close"),
+                "open": indicators.get("open"),
+                "high": indicators.get("high"),
+                "low": indicators.get("low"),
+                "change": indicators.get("change"),
+                "change_pct": indicators.get("change") / indicators.get("open") * 100 if indicators.get("open") else 0,
+                "recommendation": analysis.summary.get("RECOMMENDATION", "NEUTRAL")
+            }
+
+            _rate_cache[cache_key] = (now, result)
+            return result
+        except Exception as e:
+            if "429" in str(e):
+                _tradingview_blocked_until = time.time() + BLOCK_DURATION
+
+    # Fallback: just get the rate from Frankfurter
+    rate = _get_rate_frankfurter(base, quote)
+    if rate:
+        result = {
+            "close": rate,
+            "open": rate,
+            "high": rate,
+            "low": rate,
+            "change": 0,
+            "change_pct": 0,
+            "recommendation": "N/A"
         }
-    except Exception as e:
-        print(f"Error: {e}")
-        return None
+        _rate_cache[cache_key] = (now, result)
+        return result
+
+    # Return stale cache if available
+    if cache_key in _rate_cache:
+        return _rate_cache[cache_key][1]
+
+    return None
 
 
 def get_available_currencies():
