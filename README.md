@@ -1,13 +1,16 @@
 # Forex Watchlist & Alerts
 
-A CLI application for tracking forex currency pairs and receiving desktop notifications when rates hit user-defined targets. A free alternative to TradingView's paid alert feature.
+Track forex currency pairs and get notified when rates hit your targets. A free alternative to TradingView's paid alert feature.
+
+**Live Demo:** [Streamlit Cloud](https://forexwatchlist.streamlit.app) *(after deployment)*
 
 ## Features
 
 - Track multiple currency pairs (EUR/USD, GBP/JPY, etc.)
 - Set price alerts (above/below target)
 - Fetch live rates from frankfurter.app API (free, no API key needed)
-- Desktop notifications when alerts trigger
+- Desktop notifications when alerts trigger (CLI)
+- Web interface with Streamlit
 - Persistent storage in JSON
 
 ## Installation
@@ -19,7 +22,17 @@ A CLI application for tracking forex currency pairs and receiving desktop notifi
 pip install -r requirements.txt
 ```
 
-## Usage
+## Web App
+
+Run the Streamlit web interface:
+
+```bash
+streamlit run app.py
+```
+
+Then open http://localhost:8501 in your browser.
+
+## CLI Usage
 
 ### Add a currency pair to your watchlist
 
@@ -75,6 +88,7 @@ python main.py currencies
 
 ```
 forex_watchlist/
+├── app.py            # Streamlit web interface
 ├── main.py           # CLI interface (Click-based)
 ├── rates.py          # Fetch rates from frankfurter.app API
 ├── watchlist.py      # Manage watched pairs and alerts
@@ -91,6 +105,7 @@ This app uses the [Frankfurter API](https://www.frankfurter.app/), which provide
 
 ## Dependencies
 
+- **streamlit** - Web interface
 - **click** - CLI framework
 - **requests** - HTTP client for API calls
 - **plyer** - Cross-platform notifications (Windows only; macOS/Linux use native tools)
