@@ -2,4 +2,4 @@ click
 requests
 plyer
 streamlit
-python-dotenv
+tradingview-ta

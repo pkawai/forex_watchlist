@@ -1,34 +1,30 @@
 # Forex Watchlist & Alerts
 
-Track forex currency pairs and get notified when rates hit your targets. A free alternative to TradingView's paid alert feature.
+Track forex currency pairs and get notified when rates hit your targets. Uses real-time data from TradingView (OANDA broker).
 
-**Live Demo:** [Streamlit Cloud](https://forexwatchlist.streamlit.app) *(after deployment)*
+**No API key required!**
 
 ## Features
 
-- Track multiple currency pairs (EUR/USD, GBP/JPY, etc.)
+- Real-time forex rates from TradingView (OANDA data)
+- Live TradingView charts embedded in the app
 - Set price alerts (above/below target)
-- Real-time rates from ExchangeRate-API (updates every few minutes)
 - Desktop notifications when alerts trigger (CLI)
 - Web interface with Streamlit
-- Persistent storage in JSON
+- 30+ forex pairs including Gold & Silver
+- Technical analysis signals (Buy/Sell/Hold)
 
 ## Installation
 
-1. Clone or download this repository
-2. Install dependencies:
-
+1. Clone the repository:
 ```bash
-pip install -r requirements.txt
+git clone https://github.com/pkawai/forex_watchlist.git
+cd forex_watchlist
 ```
 
-3. Get a free API key from [exchangerate-api.com](https://www.exchangerate-api.com/)
-
-4. Create a `.env` file:
-
+2. Install dependencies:
 ```bash
-cp .env.example .env
-# Edit .env and add your API key
+pip install -r requirements.txt
 ```
 
 ## Web App
@@ -81,52 +77,49 @@ python main.py check
 python main.py remove EUR USD
 ```
 
-### Remove an alert
+## Available Pairs
 
-```bash
-python main.py remove-alert EUR USD 0
-```
+Major pairs: EUR/USD, GBP/USD, USD/JPY, USD/CHF, AUD/USD, USD/CAD, NZD/USD
 
-### List available currencies
+Cross pairs: EUR/GBP, EUR/JPY, GBP/JPY, EUR/CHF, AUD/JPY, and more...
 
-```bash
-python main.py currencies
-```
+Commodities: XAU/USD (Gold), XAG/USD (Silver)
 
 ## Project Structure
 
 ```
 forex_watchlist/
-├── app.py            # Streamlit web interface
+├── app.py            # Streamlit web interface with TradingView charts
 ├── main.py           # CLI interface (Click-based)
-├── rates.py          # Fetch rates from ExchangeRate-API
+├── rates.py          # Fetch rates from TradingView (OANDA)
 ├── watchlist.py      # Manage watched pairs and alerts
 ├── alerts.py         # Alert logic and desktop notifications
 ├── storage.py        # JSON file I/O
 ├── requirements.txt  # Python dependencies
-├── .env.example      # Environment variables template
 └── data/
     └── watchlist.json  # Persistent storage
 ```
 
-## API
+## Data Source
 
-This app uses [ExchangeRate-API](https://www.exchangerate-api.com/):
-- **Free tier:** 1,500 requests/month
-- **Update frequency:** Every few minutes
-- **Currencies:** 160+ supported
-- Requires free API key
+This app uses:
+- **TradingView** widgets for live charts
+- **tradingview-ta** library for real-time prices (via OANDA)
+- No API key needed
+- Updates in real-time
 
 ## Dependencies
 
 - **streamlit** - Web interface
+- **tradingview-ta** - Real-time forex data from TradingView
 - **click** - CLI framework
-- **requests** - HTTP client for API calls
-- **python-dotenv** - Load environment variables from .env
-- **plyer** - Cross-platform notifications (Windows only; macOS/Linux use native tools)
+- **requests** - HTTP client
+- **plyer** - Desktop notifications
 
-## Tips
+## Screenshots
 
-- Run `python main.py check` periodically (e.g., via cron) to monitor your alerts
-- Alerts are not automatically removed when triggered - remove them manually with `remove-alert`
-- The app stores data in `data/watchlist.json`
+The web app includes:
+- Live ticker tape with major pairs
+- Interactive TradingView charts
+- Price alerts with notifications
+- Technical analysis signals

@@ -1,24 +1,62 @@
 """
 Rates module for Forex Watchlist application.
-Handles fetching live forex rates from ExchangeRate-API.
-Updates every few minutes with 1500 free requests/month.
+Fetches real-time forex rates from TradingView (OANDA data).
+No API key required.
 """
 
-import os
-import requests
-from dotenv import load_dotenv
+from tradingview_ta import TA_Handler, Interval
 
-# Load .env file if it exists
-load_dotenv()
+# Common forex pairs available on OANDA via TradingView
+FOREX_PAIRS = {
+    "EUR/USD": ("EURUSD", "Euro / US Dollar"),
+    "GBP/USD": ("GBPUSD", "British Pound / US Dollar"),
+    "USD/JPY": ("USDJPY", "US Dollar / Japanese Yen"),
+    "USD/CHF": ("USDCHF", "US Dollar / Swiss Franc"),
+    "AUD/USD": ("AUDUSD", "Australian Dollar / US Dollar"),
+    "USD/CAD": ("USDCAD", "US Dollar / Canadian Dollar"),
+    "NZD/USD": ("NZDUSD", "New Zealand Dollar / US Dollar"),
+    "EUR/GBP": ("EURGBP", "Euro / British Pound"),
+    "EUR/JPY": ("EURJPY", "Euro / Japanese Yen"),
+    "GBP/JPY": ("GBPJPY", "British Pound / Japanese Yen"),
+    "EUR/CHF": ("EURCHF", "Euro / Swiss Franc"),
+    "AUD/JPY": ("AUDJPY", "Australian Dollar / Japanese Yen"),
+    "EUR/AUD": ("EURAUD", "Euro / Australian Dollar"),
+    "GBP/AUD": ("GBPAUD", "British Pound / Australian Dollar"),
+    "GBP/CAD": ("GBPCAD", "British Pound / Canadian Dollar"),
+    "EUR/CAD": ("EURCAD", "Euro / Canadian Dollar"),
+    "AUD/CAD": ("AUDCAD", "Australian Dollar / Canadian Dollar"),
+    "AUD/NZD": ("AUDNZD", "Australian Dollar / New Zealand Dollar"),
+    "NZD/JPY": ("NZDJPY", "New Zealand Dollar / Japanese Yen"),
+    "CHF/JPY": ("CHFJPY", "Swiss Franc / Japanese Yen"),
+    "CAD/JPY": ("CADJPY", "Canadian Dollar / Japanese Yen"),
+    "CAD/CHF": ("CADCHF", "Canadian Dollar / Swiss Franc"),
+    "EUR/NZD": ("EURNZD", "Euro / New Zealand Dollar"),
+    "GBP/CHF": ("GBPCHF", "British Pound / Swiss Franc"),
+    "GBP/NZD": ("GBPNZD", "British Pound / New Zealand Dollar"),
+    "USD/SGD": ("USDSGD", "US Dollar / Singapore Dollar"),
+    "USD/HKD": ("USDHKD", "US Dollar / Hong Kong Dollar"),
+    "USD/MXN": ("USDMXN", "US Dollar / Mexican Peso"),
+    "USD/ZAR": ("USDZAR", "US Dollar / South African Rand"),
+    "XAU/USD": ("XAUUSD", "Gold / US Dollar"),
+    "XAG/USD": ("XAGUSD", "Silver / US Dollar"),
+}
 
-# Get API key from environment variable or .env file
-API_KEY = os.environ.get("EXCHANGERATE_API_KEY", "")
-BASE_URL = "https://v6.exchangerate-api.com/v6"
+
+def get_symbol(base, quote):
+    """Convert base/quote to TradingView symbol."""
+    pair_key = f"{base.upper()}/{quote.upper()}"
+    if pair_key in FOREX_PAIRS:
+        return FOREX_PAIRS[pair_key][0]
+    # Try reverse
+    reverse_key = f"{quote.upper()}/{base.upper()}"
+    if reverse_key in FOREX_PAIRS:
+        return FOREX_PAIRS[reverse_key][0]
+    return None
 
 
 def get_rate(base, quote):
     """
-    Fetch exchange rate for a single currency pair.
+    Fetch real-time exchange rate from TradingView (OANDA).
 
     Args:
         base (str): Base currency code (e.g., 'EUR')
@@ -27,79 +65,73 @@ def get_rate(base, quote):
     Returns:
         float: Exchange rate, or None if failed
     """
-    if not API_KEY:
-        print("Error: EXCHANGERATE_API_KEY not set")
+    symbol = get_symbol(base, quote)
+    if not symbol:
+        print(f"Pair {base}/{quote} not available")
         return None
 
     try:
-        url = f"{BASE_URL}/{API_KEY}/pair/{base.upper()}/{quote.upper()}"
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-
-        if data.get('result') == 'success':
-            return data.get('conversion_rate')
-        else:
-            print(f"API Error: {data.get('error-type', 'Unknown error')}")
-            return None
-    except requests.RequestException as e:
-        print(f"Error fetching rate: {e}")
+        handler = TA_Handler(
+            symbol=symbol,
+            screener="forex",
+            exchange="OANDA",
+            interval=Interval.INTERVAL_1_MINUTE
+        )
+        analysis = handler.get_analysis()
+        return analysis.indicators.get("close")
+    except Exception as e:
+        print(f"Error fetching rate for {base}/{quote}: {e}")
         return None
 
 
-def get_all_rates(base):
+def get_rate_with_details(base, quote):
     """
-    Fetch all exchange rates for a base currency.
-
-    Args:
-        base (str): Base currency code (e.g., 'EUR')
+    Fetch rate with additional details (open, high, low, change).
 
     Returns:
-        dict: Dictionary of currency codes to rates, or None if failed
+        dict: Rate details or None if failed
     """
-    if not API_KEY:
-        print("Error: EXCHANGERATE_API_KEY not set")
+    symbol = get_symbol(base, quote)
+    if not symbol:
         return None
 
     try:
-        url = f"{BASE_URL}/{API_KEY}/latest/{base.upper()}"
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        data = response.json()
+        handler = TA_Handler(
+            symbol=symbol,
+            screener="forex",
+            exchange="OANDA",
+            interval=Interval.INTERVAL_1_MINUTE
+        )
+        analysis = handler.get_analysis()
+        indicators = analysis.indicators
 
-        if data.get('result') == 'success':
-            return data.get('conversion_rates')
-        else:
-            print(f"API Error: {data.get('error-type', 'Unknown error')}")
-            return None
-    except requests.RequestException as e:
-        print(f"Error fetching rates: {e}")
+        return {
+            "close": indicators.get("close"),
+            "open": indicators.get("open"),
+            "high": indicators.get("high"),
+            "low": indicators.get("low"),
+            "change": indicators.get("change"),
+            "change_pct": indicators.get("change") / indicators.get("open") * 100 if indicators.get("open") else 0,
+            "recommendation": analysis.summary.get("RECOMMENDATION", "NEUTRAL")
+        }
+    except Exception as e:
+        print(f"Error: {e}")
         return None
 
 
 def get_available_currencies():
     """
-    Get list of available currencies from the API.
+    Get available forex pairs.
 
     Returns:
-        dict: Dictionary of currency codes to names, or None if failed
+        dict: Available pairs with descriptions
     """
-    if not API_KEY:
-        print("Error: EXCHANGERATE_API_KEY not set")
-        return None
+    return FOREX_PAIRS
 
-    try:
-        url = f"{BASE_URL}/{API_KEY}/codes"
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        data = response.json()
 
-        if data.get('result') == 'success':
-            # Convert list of [code, name] to dict
-            return {code: name for code, name in data.get('supported_codes', [])}
-        else:
-            print(f"API Error: {data.get('error-type', 'Unknown error')}")
-            return None
-    except requests.RequestException as e:
-        print(f"Error fetching currencies: {e}")
-        return None
+def get_tradingview_symbol(base, quote):
+    """Get the full TradingView symbol for embedding widgets."""
+    symbol = get_symbol(base, quote)
+    if symbol:
+        return f"OANDA:{symbol}"
+    return None
