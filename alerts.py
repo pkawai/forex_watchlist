@@ -3,7 +3,8 @@ Alerts module for Forex Watchlist application.
 Handles alert checking and desktop notifications.
 """
 
-from plyer import notification
+import platform
+import subprocess
 from rates import get_rate
 from watchlist import update_rate
 
@@ -16,14 +17,29 @@ def send_notification(title, message):
         title (str): Notification title
         message (str): Notification body text
     """
+    system = platform.system()
+
     try:
-        notification.notify(
-            title=title,
-            message=message,
-            app_name="Forex Watchlist",
-            timeout=10
-        )
-    except Exception as e:
+        if system == "Darwin":
+            # macOS - use osascript for reliable notifications
+            script = f'display notification "{message}" with title "{title}"'
+            subprocess.run(["osascript", "-e", script], check=True)
+        elif system == "Linux":
+            # Linux - use notify-send if available
+            subprocess.run(["notify-send", title, message], check=True)
+        elif system == "Windows":
+            # Windows - try plyer
+            from plyer import notification
+            notification.notify(
+                title=title,
+                message=message,
+                app_name="Forex Watchlist",
+                timeout=10
+            )
+        else:
+            # Fallback to console
+            print(f"[ALERT] {title}: {message}")
+    except Exception:
         # Fallback to console if notification fails
         print(f"[ALERT] {title}: {message}")
 
