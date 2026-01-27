@@ -5,11 +5,16 @@ A web application for tracking forex currency pairs and monitoring
 price alerts. Free alternative to TradingView's paid alert feature.
 """
 
+import os
 import streamlit as st
+from dotenv import load_dotenv
 from storage import load_watchlist, save_watchlist
-from rates import get_rate, get_available_currencies
+from rates import get_rate, get_available_currencies, API_KEY
 from watchlist import add_pair, remove_pair, add_alert, remove_alert, list_pairs, find_pair
 from alerts import check_alert_triggered
+
+# Load environment variables
+load_dotenv()
 
 # Page config
 st.set_page_config(
@@ -20,6 +25,19 @@ st.set_page_config(
 
 st.title("💱 Forex Watchlist & Alerts")
 st.caption("Track currency pairs and get notified when rates hit your targets")
+
+# Check for API key
+if not API_KEY:
+    st.error("⚠️ API Key Required")
+    st.markdown("""
+    1. Get a free API key at [exchangerate-api.com](https://www.exchangerate-api.com/)
+    2. Create a `.env` file in the project folder with:
+    ```
+    EXCHANGERATE_API_KEY=your_api_key_here
+    ```
+    3. Restart the app
+    """)
+    st.stop()
 
 # Sidebar - Add new pair
 st.sidebar.header("Add Currency Pair")
@@ -181,4 +199,4 @@ with tab3:
 
 # Footer
 st.divider()
-st.caption("Data from [Frankfurter API](https://www.frankfurter.app/) (European Central Bank rates)")
+st.caption("Data from [ExchangeRate-API](https://www.exchangerate-api.com/) - Updates every few minutes")

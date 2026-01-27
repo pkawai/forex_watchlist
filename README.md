@@ -8,7 +8,7 @@ Track forex currency pairs and get notified when rates hit your targets. A free 
 
 - Track multiple currency pairs (EUR/USD, GBP/JPY, etc.)
 - Set price alerts (above/below target)
-- Fetch live rates from frankfurter.app API (free, no API key needed)
+- Real-time rates from ExchangeRate-API (updates every few minutes)
 - Desktop notifications when alerts trigger (CLI)
 - Web interface with Streamlit
 - Persistent storage in JSON
@@ -20,6 +20,15 @@ Track forex currency pairs and get notified when rates hit your targets. A free 
 
 ```bash
 pip install -r requirements.txt
+```
+
+3. Get a free API key from [exchangerate-api.com](https://www.exchangerate-api.com/)
+
+4. Create a `.env` file:
+
+```bash
+cp .env.example .env
+# Edit .env and add your API key
 ```
 
 ## Web App
@@ -90,24 +99,30 @@ python main.py currencies
 forex_watchlist/
 ├── app.py            # Streamlit web interface
 ├── main.py           # CLI interface (Click-based)
-├── rates.py          # Fetch rates from frankfurter.app API
+├── rates.py          # Fetch rates from ExchangeRate-API
 ├── watchlist.py      # Manage watched pairs and alerts
 ├── alerts.py         # Alert logic and desktop notifications
 ├── storage.py        # JSON file I/O
 ├── requirements.txt  # Python dependencies
+├── .env.example      # Environment variables template
 └── data/
     └── watchlist.json  # Persistent storage
 ```
 
 ## API
 
-This app uses the [Frankfurter API](https://www.frankfurter.app/), which provides free foreign exchange rates from the European Central Bank. No API key required.
+This app uses [ExchangeRate-API](https://www.exchangerate-api.com/):
+- **Free tier:** 1,500 requests/month
+- **Update frequency:** Every few minutes
+- **Currencies:** 160+ supported
+- Requires free API key
 
 ## Dependencies
 
 - **streamlit** - Web interface
 - **click** - CLI framework
 - **requests** - HTTP client for API calls
+- **python-dotenv** - Load environment variables from .env
 - **plyer** - Cross-platform notifications (Windows only; macOS/Linux use native tools)
 
 ## Tips
