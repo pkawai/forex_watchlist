@@ -12,6 +12,7 @@ from storage import load_watchlist, save_watchlist
 from rates import get_rate, get_rate_with_details, get_available_currencies, get_tradingview_symbol, FOREX_PAIRS
 from watchlist import add_pair, remove_pair, add_alert, remove_alert, list_pairs
 from alerts import check_alert_triggered
+from portfolio import open_position, close_position, get_all_positions, calculate_pips, get_portfolio_summary
 
 # Page config
 st.set_page_config(
@@ -135,7 +136,7 @@ else:
     st.sidebar.info("Add a currency pair first")
 
 # Main content
-tab1, tab2, tab3 = st.tabs(["📊 Watchlist & Charts", "🔔 Check Alerts", "💰 Live Rates"])
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Watchlist & Charts", "🔔 Check Alerts", "💰 Live Rates", "💼 Portfolio"])
 
 with tab1:
     st.header("Your Watchlist")
@@ -358,6 +359,100 @@ with tab3:
 
         if st.button("🔄 Refresh Rates"):
             st.rerun()
+
+with tab4:
+    st.header("Portfolio")
+
+    # Open a new position
+    st.subheader("Open Position")
+    with st.form("position_form"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            pos_pair = st.selectbox("Pair", available_pairs, key="portfolio_pair")
+            pos_direction = st.radio("Direction", ["BUY", "SELL"], horizontal=True, key="pos_dir")
+        with col2:
+            pos_entry = st.number_input("Entry Price", min_value=0.00001, value=1.00000, step=0.00001, format="%.5f", key="pos_entry")
+            pos_lots = st.number_input("Lot Size", min_value=0.01, value=0.1, step=0.01, format="%.2f", key="pos_lots")
+        with col3:
+            pos_sl = st.number_input("Stop Loss (optional)", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="pos_sl")
+            pos_tp = st.number_input("Take Profit (optional)", min_value=0.0, value=0.0, step=0.00001, format="%.5f", key="pos_tp")
+
+        pos_notes = st.text_input("Notes (optional)", key="pos_notes")
+        pos_submitted = st.form_submit_button("Open Position", type="primary", use_container_width=True)
+
+        if pos_submitted:
+            sl = pos_sl if pos_sl > 0 else None
+            tp = pos_tp if pos_tp > 0 else None
+            open_position(pos_pair, pos_direction, pos_entry, pos_lots, sl, tp, pos_notes)
+            st.success(f"Opened {pos_direction} {pos_pair} at {pos_entry:.5f}")
+            st.rerun()
+
+    # Get positions and calculate live P/L
+    positions = get_all_positions()
+
+    if positions:
+        st.divider()
+
+        # Calculate pips for each position using live rates
+        positions_with_pips = []
+        for pos in positions:
+            base, quote = pos["pair"].split("/")
+            current_rate = get_rate(base, quote)
+            if current_rate:
+                pips = calculate_pips(pos["pair"], pos["direction"], pos["entry_price"], current_rate)
+                positions_with_pips.append((pos, pips, current_rate))
+            else:
+                positions_with_pips.append((pos, 0, None))
+
+        # Portfolio summary
+        summary = get_portfolio_summary([(p, pips) for p, pips, _ in positions_with_pips])
+
+        st.subheader("Portfolio Summary")
+        s1, s2, s3, s4, s5 = st.columns(5)
+        with s1:
+            st.metric("Open Positions", summary["total_positions"])
+        with s2:
+            st.metric("Total P/L", f"{summary['total_pips']:+.1f} pips")
+        with s3:
+            st.metric("Winning", summary["winning"])
+        with s4:
+            st.metric("Losing", summary["losing"])
+        with s5:
+            st.metric("Total Lots", f"{summary['total_lots']:.2f}")
+
+        # Open positions list
+        st.divider()
+        st.subheader("Open Positions")
+
+        for pos, pips, current_rate in positions_with_pips:
+            color = "green" if pips > 0 else "red" if pips < 0 else "gray"
+            direction_label = "Long" if pos["direction"] == "BUY" else "Short"
+
+            with st.container():
+                c1, c2, c3, c4 = st.columns([2, 2, 1, 1])
+                with c1:
+                    st.markdown(f"**{pos['pair']}** - {direction_label}")
+                    st.caption(f"Opened: {pos['opened_at']} | {pos['lot_size']} lots")
+                with c2:
+                    current_display = f"{current_rate:.5f}" if current_rate else "N/A"
+                    st.caption(f"Entry: {pos['entry_price']:.5f} | Current: {current_display}")
+                    sl_text = f"SL: {pos['stop_loss']:.5f}" if pos.get("stop_loss") else "SL: -"
+                    tp_text = f"TP: {pos['take_profit']:.5f}" if pos.get("take_profit") else "TP: -"
+                    st.caption(f"{sl_text} | {tp_text}")
+                    if pos.get("notes"):
+                        st.caption(f"Notes: {pos['notes']}")
+                with c3:
+                    st.markdown(f":{color}[**{pips:+.1f} pips**]")
+                with c4:
+                    if st.button("Close", key=f"close_pos_{pos['id']}"):
+                        close_position(pos["id"])
+                        st.rerun()
+                st.divider()
+
+        if st.button("Refresh Prices"):
+            st.rerun()
+    else:
+        st.info("No open positions. Use the form above to track a position.")
 
 # Footer
 st.divider()
