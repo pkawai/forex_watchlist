@@ -12,6 +12,7 @@ from storage import load_watchlist, save_watchlist
 from rates import get_rate, get_rate_with_details, get_available_currencies, get_tradingview_symbol, FOREX_PAIRS
 from watchlist import add_pair, remove_pair, add_alert, remove_alert, list_pairs
 from alerts import check_alert_triggered
+from journal import add_trade, delete_trade, get_all_trades, get_journal_stats
 
 # Page config
 st.set_page_config(
@@ -135,7 +136,7 @@ else:
     st.sidebar.info("Add a currency pair first")
 
 # Main content
-tab1, tab2, tab3 = st.tabs(["📊 Watchlist & Charts", "🔔 Check Alerts", "💰 Live Rates"])
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Watchlist & Charts", "🔔 Check Alerts", "💰 Live Rates", "📓 Trade Journal"])
 
 with tab1:
     st.header("Your Watchlist")
@@ -358,6 +359,91 @@ with tab3:
 
         if st.button("🔄 Refresh Rates"):
             st.rerun()
+
+with tab4:
+    st.header("Trade Journal")
+
+    # Log a new trade
+    st.subheader("Log a Trade")
+    with st.form("trade_form"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            trade_pair = st.selectbox("Pair", available_pairs, key="journal_pair")
+            trade_direction = st.radio("Direction", ["BUY", "SELL"], horizontal=True)
+        with col2:
+            trade_entry = st.number_input("Entry Price", min_value=0.00001, value=1.00000, step=0.00001, format="%.5f")
+            trade_exit = st.number_input("Exit Price", min_value=0.00001, value=1.00000, step=0.00001, format="%.5f")
+        with col3:
+            trade_lots = st.number_input("Lot Size", min_value=0.01, value=0.1, step=0.01, format="%.2f")
+            trade_notes = st.text_input("Notes (optional)")
+
+        submitted = st.form_submit_button("Log Trade", type="primary", use_container_width=True)
+        if submitted:
+            trade = add_trade(trade_pair, trade_direction, trade_entry, trade_exit, trade_lots, trade_notes)
+            pips = trade["pips"]
+            emoji = "+" if pips > 0 else ""
+            st.success(f"Trade logged: {trade_pair} {trade_direction} | {emoji}{pips} pips")
+            st.rerun()
+
+    # Trading stats
+    st.divider()
+    stats = get_journal_stats()
+
+    if stats["total_trades"] > 0:
+        st.subheader("Performance Stats")
+        s1, s2, s3, s4 = st.columns(4)
+        with s1:
+            st.metric("Total Trades", stats["total_trades"])
+        with s2:
+            st.metric("Win Rate", f"{stats['win_rate']}%")
+        with s3:
+            st.metric("Total Pips", f"{stats['total_pips']:+.1f}")
+        with s4:
+            st.metric("Avg Pips/Trade", f"{stats['avg_pips']:+.1f}")
+
+        s5, s6, s7, s8 = st.columns(4)
+        with s5:
+            st.metric("Wins", stats["wins"])
+        with s6:
+            st.metric("Losses", stats["losses"])
+        with s7:
+            st.metric("Best Trade", f"+{stats['best_trade']:.1f} pips")
+        with s8:
+            st.metric("Worst Trade", f"{stats['worst_trade']:.1f} pips")
+
+        st.caption(f"Most traded pair: **{stats['most_traded_pair']}**")
+
+    # Trade history
+    st.divider()
+    st.subheader("Trade History")
+    trades = get_all_trades()
+
+    if not trades:
+        st.info("No trades logged yet. Use the form above to log your first trade.")
+    else:
+        for trade in trades:
+            pips = trade["pips"]
+            color = "green" if pips > 0 else "red"
+            icon = "W" if pips > 0 else "L"
+            direction_icon = "Long" if trade["direction"] == "BUY" else "Short"
+
+            with st.container():
+                c1, c2, c3, c4 = st.columns([2, 2, 1, 1])
+                with c1:
+                    st.markdown(f"**{trade['pair']}** - {direction_icon}")
+                    st.caption(f"{trade['date']}")
+                with c2:
+                    st.caption(f"Entry: {trade['entry_price']:.5f} | Exit: {trade['exit_price']:.5f}")
+                    if trade.get("notes"):
+                        st.caption(f"Notes: {trade['notes']}")
+                with c3:
+                    st.markdown(f":{color}[**{pips:+.1f} pips**]")
+                    st.caption(f"{trade['lot_size']} lots")
+                with c4:
+                    if st.button("Delete", key=f"del_trade_{trade['id']}"):
+                        delete_trade(trade["id"])
+                        st.rerun()
+                st.divider()
 
 # Footer
 st.divider()
